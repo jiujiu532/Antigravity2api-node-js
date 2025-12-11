@@ -179,19 +179,19 @@ function detectEmbeddedError(body) {
 
     try {
         const parsed = typeof body === 'string' ? JSON.parse(body) : body;
-        
+
         // 支持两种格式：
         // 1. { "error": { "code": 429, ... } } - 标准格式
         // 2. { "code": 429, "status": "RESOURCE_EXHAUSTED", ... } - 直接格式
         let errorObj = null;
-        
+
         if (parsed?.error) {
             errorObj = parsed.error;
         } else if (parsed?.code || parsed?.status) {
             // 直接格式：{ "code": 429, "status": "RESOURCE_EXHAUSTED", "message": "..." }
             errorObj = parsed;
         }
-        
+
         if (!errorObj) return null;
 
         const status = statusFromStatusText(errorObj.code || errorObj.status);
@@ -348,9 +348,9 @@ function convertToToolCall(functionCall) {
             arguments: JSON.stringify(functionCall.args)
         }
     };
-  }
-  
-  
+}
+
+
 // 辅助函数：在保留原有结构的同时记录 thoughtSignature
 function convertToToolCallWithSignature(functionCall, thoughtSignature) {
     const toolCall = convertToToolCall(functionCall);
@@ -438,13 +438,25 @@ export async function generateAssistantResponse(requestBody, token, callback) {
 
     const state = { toolCalls: [], usage: null, textAccumulator: { text: '', signature: null } };
     let buffer = ''; // 缓冲区：处理跨 chunk 的不完整行
+    let streamChunks = []; // 收集流式响应（用于 debug=high 日志）
 
     const processChunk = (chunk) => {
         buffer += chunk;
+        streamChunks.push(chunk); // 收集响应片段
         const lines = buffer.split('\n');
         buffer = lines.pop(); // 保留最后一行（可能不完整）
         lines.forEach(line => parseAndEmitStreamChunk(line, state, callback));
     };
+
+    // 记录后端请求
+    const startTime = Date.now();
+    log.backend({
+        type: 'request',
+        url: config.api.url,
+        method: 'POST',
+        headers: buildHeaders(token),
+        body: requestBody
+    });
 
     try {
         await withRequesterFallback(async currentUseAxios => withRetry(async (currentToken) => {
@@ -475,7 +487,22 @@ export async function generateAssistantResponse(requestBody, token, callback) {
                     .onError(reject);
             });
         }, token));
+
+        // 记录后端响应（成功）
+        log.backend({
+            type: 'response',
+            status: 200,
+            durationMs: Date.now() - startTime,
+            body: streamChunks.join('')
+        });
     } catch (error) {
+        // 记录后端响应（失败）
+        log.backend({
+            type: 'response',
+            status: error?.status || 'Error',
+            durationMs: Date.now() - startTime,
+            body: error?.message || error
+        });
         await handleApiError(error, token);
     }
 
@@ -486,15 +513,28 @@ export async function getAvailableModels() {
     const token = await tokenManager.getToken();
     if (!token) throw new Error('没有可用的token，请运行 npm run login 获取token');
 
+    const headers = buildHeaders(token);
+    const requestBody = {};
+
+    // 记录后端请求
+    const startTime = Date.now();
+    log.backend({
+        type: 'request',
+        url: config.api.modelsUrl,
+        method: 'POST',
+        headers,
+        body: requestBody
+    });
+
     try {
         const data = await withRequesterFallback(async currentUseAxios => withRetry(async (currentToken) => {
-            const headers = buildHeaders(currentToken);
+            const currentHeaders = buildHeaders(currentToken);
 
             if (currentUseAxios) {
-                return (await axios(buildAxiosConfig(config.api.modelsUrl, headers, {}))).data;
+                return (await axios(buildAxiosConfig(config.api.modelsUrl, currentHeaders, {}))).data;
             }
 
-            const response = await requester.antigravity_fetch(config.api.modelsUrl, buildRequesterConfig(headers, {}));
+            const response = await requester.antigravity_fetch(config.api.modelsUrl, buildRequesterConfig(currentHeaders, {}));
             const bodyText = await response.text();
             const embeddedError = detectEmbeddedError(bodyText);
 
@@ -510,6 +550,14 @@ export async function getAvailableModels() {
             return JSON.parse(bodyText);
         }, token));
 
+        // 记录后端响应（成功）
+        log.backend({
+            type: 'response',
+            status: 200,
+            durationMs: Date.now() - startTime,
+            body: data
+        });
+
         return {
             object: 'list',
             data: Object.keys(data.models).map(id => ({
@@ -520,39 +568,79 @@ export async function getAvailableModels() {
             }))
         };
     } catch (error) {
+        // 记录后端响应（失败）
+        log.backend({
+            type: 'response',
+            status: error?.status || 'Error',
+            durationMs: Date.now() - startTime,
+            body: error?.message || error
+        });
         await handleApiError(error, token);
     }
 }
 
 // 内部复用的非流式请求封装，返回上游原始 JSON，方便不同上层按需解析
 async function callNoStreamApi(requestBody, token) {
-    return await withRequesterFallback(async currentUseAxios =>
-        withRetry(async (currentToken) => {
-            const headers = buildHeaders(currentToken);
+    const headers = buildHeaders(token);
 
-            if (currentUseAxios) {
-                return (await axios(buildAxiosConfig(config.api.noStreamUrl, headers, requestBody))).data;
-            }
+    // 记录后端请求
+    const startTime = Date.now();
+    log.backend({
+        type: 'request',
+        url: config.api.noStreamUrl,
+        method: 'POST',
+        headers,
+        body: requestBody
+    });
 
-            const response = await requester.antigravity_fetch(
-                config.api.noStreamUrl,
-                buildRequesterConfig(headers, requestBody)
-            );
-            const bodyText = await response.text();
-            const embeddedError = detectEmbeddedError(bodyText);
+    try {
+        const data = await withRequesterFallback(async currentUseAxios =>
+            withRetry(async (currentToken) => {
+                const currentHeaders = buildHeaders(currentToken);
 
-            if (response.status !== 200 || embeddedError) {
-                throw {
-                    status: embeddedError?.status ?? response.status,
-                    message: embeddedError?.message ?? bodyText,
-                    retryDelayMs: embeddedError?.retryDelayMs,
-                    disableToken: embeddedError?.disableToken
-                };
-            }
+                if (currentUseAxios) {
+                    return (await axios(buildAxiosConfig(config.api.noStreamUrl, currentHeaders, requestBody))).data;
+                }
 
-            return JSON.parse(bodyText);
-        }, token)
-    );
+                const response = await requester.antigravity_fetch(
+                    config.api.noStreamUrl,
+                    buildRequesterConfig(currentHeaders, requestBody)
+                );
+                const bodyText = await response.text();
+                const embeddedError = detectEmbeddedError(bodyText);
+
+                if (response.status !== 200 || embeddedError) {
+                    throw {
+                        status: embeddedError?.status ?? response.status,
+                        message: embeddedError?.message ?? bodyText,
+                        retryDelayMs: embeddedError?.retryDelayMs,
+                        disableToken: embeddedError?.disableToken
+                    };
+                }
+
+                return JSON.parse(bodyText);
+            }, token)
+        );
+
+        // 记录后端响应（成功）
+        log.backend({
+            type: 'response',
+            status: 200,
+            durationMs: Date.now() - startTime,
+            body: data
+        });
+
+        return data;
+    } catch (error) {
+        // 记录后端响应（失败）
+        log.backend({
+            type: 'response',
+            status: error?.status || 'Error',
+            durationMs: Date.now() - startTime,
+            body: error?.message || error
+        });
+        throw error;
+    }
 }
 
 export async function generateAssistantResponseNoStream(requestBody, token) {

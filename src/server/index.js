@@ -1426,8 +1426,8 @@ app.get('/admin/quota/all', requireApiKey, async (req, res) => {
       indexes && indexes.length > 0
         ? indexes
         : accounts
-            .map((_, idx) => idx)
-            .filter(idx => accounts[idx]?.enable !== false);
+          .map((_, idx) => idx)
+          .filter(idx => accounts[idx]?.enable !== false);
 
     if (targetIndexes.length === 0) {
       return res.status(404).json({ error: '没有匹配的启用凭证' });
@@ -1566,6 +1566,23 @@ const createChatCompletionHandler = (resolveToken, options = {}) => async (req, 
         }
       }
     });
+    // 同时输出到控制台详细日志
+    if (logger.detail) {
+      logger.detail({
+        method: req.method,
+        path: req.originalUrl,
+        status,
+        durationMs: Date.now() - startedAt,
+        request: requestSnapshot,
+        response: {
+          status,
+          headers: res.getHeaders ? res.getHeaders() : undefined,
+          body: responseBodyForLog,
+          modelOutput: responseSummaryForLog
+        },
+        error: success ? undefined : message
+      });
+    }
   };
   try {
     if (!messages) {
@@ -1768,7 +1785,7 @@ app.post('/v1beta/models/:model\\:generateContent', async (req, res) => {
   let token = null;
   let responseBodyForLog = null;
 
-  const writeLog = ({ success, status, message }) =>
+  const writeLog = ({ success, status, message }) => {
     appendLog({
       timestamp: new Date().toISOString(),
       model,
@@ -1788,6 +1805,23 @@ app.post('/v1beta/models/:model\\:generateContent', async (req, res) => {
         }
       }
     });
+    // 同时输出到控制台详细日志
+    if (logger.detail) {
+      logger.detail({
+        method: req.method,
+        path: req.originalUrl,
+        status,
+        durationMs: Date.now() - startedAt,
+        request: requestSnapshot,
+        response: {
+          status,
+          headers: res.getHeaders ? res.getHeaders() : undefined,
+          body: responseBodyForLog
+        },
+        error: success ? undefined : message
+      });
+    }
+  };
 
   try {
     const body = req.body || {};
@@ -1839,7 +1873,7 @@ app.post('/v1/messages/count_tokens', (req, res) => {
   const requestSnapshot = createRequestSnapshot(req);
   let responseBodyForLog = null;
 
-  const writeLog = ({ success, status, message }) =>
+  const writeLog = ({ success, status, message }) => {
     appendLog({
       timestamp: new Date().toISOString(),
       model: req.body?.model || 'unknown',
@@ -1859,6 +1893,23 @@ app.post('/v1/messages/count_tokens', (req, res) => {
         }
       }
     });
+    // 同时输出到控制台详细日志
+    if (logger.detail) {
+      logger.detail({
+        method: req.method,
+        path: req.originalUrl,
+        status,
+        durationMs: Date.now() - startedAt,
+        request: requestSnapshot,
+        response: {
+          status,
+          headers: res.getHeaders ? res.getHeaders() : undefined,
+          body: responseBodyForLog
+        },
+        error: success ? undefined : message
+      });
+    }
+  };
 
   try {
     const result = countClaudeTokens(req.body || {});
@@ -1881,7 +1932,7 @@ app.post('/v1/messages', async (req, res) => {
   let openaiReq = null;
   let requestBody = null;
 
-  const writeLog = ({ success, status, message }) =>
+  const writeLog = ({ success, status, message }) => {
     appendLog({
       timestamp: new Date().toISOString(),
       model: openaiReq?.model || req.body?.model || 'unknown',
@@ -1901,6 +1952,23 @@ app.post('/v1/messages', async (req, res) => {
         }
       }
     });
+    // 同时输出到控制台详细日志
+    if (logger.detail) {
+      logger.detail({
+        method: req.method,
+        path: req.originalUrl,
+        status,
+        durationMs: Date.now() - startedAt,
+        request: requestSnapshot,
+        response: {
+          status,
+          headers: res.getHeaders ? res.getHeaders() : undefined,
+          body: responseBodyForLog
+        },
+        error: success ? undefined : message
+      });
+    }
+  };
 
   try {
     openaiReq = mapClaudeToOpenAI(req.body || {});
