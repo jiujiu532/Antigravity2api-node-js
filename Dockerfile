@@ -30,11 +30,11 @@ RUN mkdir -p data && \
     chown -R node:node /app
 
 # 暴露端口
-EXPOSE 8045
+EXPOSE 8080
 
 # 设置环境变量默认值
 ENV NODE_ENV=production
-ENV PORT=8045
+ENV PORT=8080
 ENV HOST=0.0.0.0
 
 # 健康检查
