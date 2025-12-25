@@ -8,7 +8,7 @@ const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 // 默认配置结构（用于兜底，当 config.json 和 .env 都没有时使用）
 const DEFAULT_DATA_CONFIG = {
   // 服务器配置
-  PORT: 8045,
+  PORT: 8080,
   HOST: '0.0.0.0',
 
   // API 配置

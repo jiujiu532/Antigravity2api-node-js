@@ -11,7 +11,7 @@ import {
 
 const envPath = '.env';
 const defaultEnv = `# 服务器配置
-PORT=8045
+PORT=8080
 HOST=0.0.0.0
 
 # API 配置
@@ -85,7 +85,7 @@ function loadConfigFromEnv() {
 
   const config = {
     server: {
-      port: parseInt(flat.PORT ?? 8045, 10) || 8045,
+      port: parseInt(flat.PORT ?? 8080, 10) || 8080,
       host: flat.HOST || '0.0.0.0'
     },
     imageBaseUrl: flat.IMAGE_BASE_URL || null,

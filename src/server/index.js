@@ -233,7 +233,7 @@ const SETTINGS_DEFINITIONS = [
     key: 'PORT',
     label: '服务端口',
     category: '服务与网络',
-    defaultValue: 8045,
+    defaultValue: 8080,
     valueResolver: cfg => cfg.server.port
   },
   {
@@ -1566,7 +1566,7 @@ app.use('/admin', (req, res, next) => {
 // ===== API routes =====
 
 const createChatCompletionHandler = (resolveToken, options = {}) => async (req, res) => {
-  const { messages, model, stream = true, tools, ...params } = req.body || {};
+  const { messages, model, stream = false, tools, ...params } = req.body || {};
   const startedAt = Date.now();
   const requestSnapshot = createRequestSnapshot(req);
   const streamEventsForLog = [];
